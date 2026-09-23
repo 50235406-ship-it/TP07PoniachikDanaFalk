@@ -1,0 +1,10 @@
+<h1>Iniciar Sesión</h1>
+<form action="@Url.Action("Logueado", "Home")" method="post">
+    Ingrese su nombre de usuario: <input type="text" id="nombreUsuario" placeholder="Nombre de usuario" name="NombreUsuario" oninput="validoNombredeUsuario()"/> <br>
+    <p id="mensajeNombreUsuario"></p>
+    Ingrese su contraseña: <input type="password" id="contraseña" placeholder="Contraseña" name="Contraseña" oninput="validoContraseña()"/> <br>
+    <p id="mensajeContraseña"></p>
+    <p id="mensajeError">@ViewBag.mensaje</p>
+    <button type="submit">Iniciar Sesión</button>
+</form>
+<script src="~/js/site.js"></script>

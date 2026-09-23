@@ -1,0 +1,16 @@
+<h1>Registrarse</h1>
+<form action="@Url.Action("Registrado", "Home")" method="post">
+    Ingrese su nombre de usuario: <input type="text" id="nombreUsuario" placeholder="Nombre de usuario" name="NombreUsuario" oninput="validoNombredeUsuario()"/> <br>
+    <p id="mensajeNombreUsuario"></p>
+    Ingrese su contraseña: <input type="password" id="contraseña" placeholder="Contraseña" name="Contraseña" oninput="validoContraseña()"/> <br>
+    <p id="mensajeContraseña"></p>
+    Ingrese su contraseña nuevamente: <input type="password" id="contraseña2" placeholder="Contraseña" name="Contraseña" oninput="contraseñasIguales()"/> <br>
+    <p id="mensajeContraseña2"></p>
+    Ingrese su nombre: <input type="text" id="nombre" placeholder="Nombre" name="Nombre" oninput="validoNombre()"/> <br>
+    <p id="mensajeNombre"></p>
+    Ingrese su apellido: <input type="text" id="apellido" placeholder="Apellido" name="Apellido" oninput="validoApellido()"/> <br>
+    <p id="mensajeApellido"></p>
+    <h3>@ViewBag.mensaje</h3>
+    <button type="submit">Registrarse</button>
+</form>
+<script src="~/js/site.js"></script>
