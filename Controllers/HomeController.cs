@@ -43,6 +43,35 @@ public class HomeController : Controller
         return View();
     }
 
+    public IActionResult Publicaciones() {
+        BD bd = new BD();
+        if (HttpContext.Session.GetString("NombreUsuario") == null) {
+            return RedirectToAction("IniciarSesion");
+        }
+        ViewBag.publicaciones = bd.ObtenerPublicaciones();
+
+        return View();
+    }
+
+    public IActionResult GuardarPublicacion([FromBody] Publicacion publicacion) {
+        if (HttpContext.Session.GetString("NombreUsuario") == null) {
+            return Unauthorized();
+        }
+
+        if (publicacion == null || string.IsNullOrWhiteSpace(publicacion.Titulo) || string.IsNullOrWhiteSpace(publicacion.Descripcion)) {
+            return BadRequest(new { success = false, message = "Completa título y descripción." });
+        }
+
+        publicacion.IdUsuario = HttpContext.Session.GetInt32("ID") ?? 0;
+        publicacion.FechaPublicacion = DateTime.Now;
+        publicacion.Imagen = string.IsNullOrWhiteSpace(publicacion.Imagen) ? null : publicacion.Imagen;
+
+        BD bd = new BD();
+        bd.GuardarPublicacion(publicacion);
+
+        return Json(new { success = true, message = "Publicación creada correctamente." });
+    }
+
     public IActionResult Registrado(string nombreUsuario, string contraseña, string nombre, string apellido, string tipoUsuario) {
 
         BD bd = new BD();
@@ -65,7 +94,7 @@ public class HomeController : Controller
         HttpContext.Session.SetString("TipoUsuario", usuarioRegistrado.TipoUsuario);
         HttpContext.Session.SetInt32("ID", usuarioRegistrado.ID);
 
-        return View("Bienvenida");
+        return RedirectToAction("Publicaciones");
 
     }
 
@@ -84,7 +113,7 @@ public class HomeController : Controller
             HttpContext.Session.SetString("TipoUsuario", usuarioLogueado.TipoUsuario);
             HttpContext.Session.SetInt32("ID", usuarioLogueado.ID);
 
-            return View("Bienvenida");
+            return RedirectToAction("Publicaciones");
 
         } else {
 
