@@ -9,4 +9,7 @@ public class Publicacion
     public string? Imagen { get; set; }
     public DateTime FechaPublicacion { get; set; }
     public string NombreUsuario { get; set; } = string.Empty;
+    public int CantidadLikes { get; set; }
+    public bool MeGustaUsuario { get; set; }
+    public List<Comentario> Comentarios { get; set; } = new();
 }
