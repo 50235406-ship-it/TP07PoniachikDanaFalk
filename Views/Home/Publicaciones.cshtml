@@ -13,7 +13,6 @@
 <div class="card">
     <h3>Datos de tu cuenta</h3>
     <div style="margin-top: 1.5rem;">
-        <p><strong>ID:</strong> @Context.Session.GetInt32("ID")</p>
         <p><strong>Nombre de usuario:</strong> @Context.Session.GetString("NombreUsuario")</p>
         <p><strong>Nombre:</strong> @Context.Session.GetString("Nombre")</p>
         <p><strong>Apellido:</strong> @Context.Session.GetString("Apellido")</p>
@@ -36,7 +35,7 @@
         <div class="publication-layout">
             <div class="publication-form-card">
                 <h2>Crear publicación</h2>
-                <form id="crearPublicacionForm" action="@Url.Action("GuardarPublicacion", "Home")" method="post">
+                <form id="crearPublicacionForm" action="@Url.Action("GuardarPublicacion", "Home")" method="post" enctype="multipart/form-data">
                     <div class="input-group">
                         <label for="titulo">Título</label>
                         <input id="titulo" name="titulo" type="text" maxlength="200" placeholder="¿Qué quieres compartir?" required />
@@ -48,8 +47,8 @@
                     </div>
 
                     <div class="input-group">
-                        <label for="imagen">Imagen (opcional)</label>
-                        <input id="imagen" name="imagen" type="text" placeholder="Nombre del archivo o URL" />
+                        <label for="imagen">Imagen (opcional - JPG, PNG, GIF - máx 5MB)</label>
+                        <input id="imagen" name="imagen" type="file" accept="image/jpeg,image/png,image/gif" />
                     </div>
 
                     <button type="submit" class="primary-button">Publicar</button>
@@ -101,7 +100,7 @@
         }
 
         function renderComments(comentarios = []) {
-            if (!comentarios.length) {
+            if (!comentarios || comentarios.length === 0) {
                 return '<p class="empty-comments">Sin comentarios todavía.</p>';
             }
 
@@ -115,7 +114,7 @@
 
         function renderPublicacion(publicacion) {
             const imagenHtml = publicacion.imagen
-                ? `<div class="post-image"><img src="${escapeHtml(publicacion.imagen)}" alt="${escapeHtml(publicacion.titulo || 'Publicación')}" /></div>`
+                ? `<div class="post-image"><img src="${escapeHtml(publicacion.imagen)}" alt="${escapeHtml(publicacion.titulo || 'Publicación')}" onerror="this.style.display='none'" /></div>`
                 : '';
 
             return `
@@ -158,12 +157,14 @@
         async function loadPublicaciones() {
             try {
                 const response = await fetch(`@Url.Action("ObtenerPublicaciones", "Home")?desde=${desde}&cantidad=10`);
+                const data = await response.json();
 
-                if (!response.ok) {
-                    throw new Error('No se pudieron cargar las publicaciones');
+                if (data.error) {
+                    postList.innerHTML = `<p class="empty-state">Error: ${escapeHtml(data.error)}</p>`;
+                    loadMoreButton.style.display = 'none';
+                    return;
                 }
 
-                const data = await response.json();
                 const publicaciones = Array.isArray(data.publicaciones) ? data.publicaciones : [];
 
                 if (desde === 0) {
@@ -176,11 +177,16 @@
                     return;
                 }
 
-                postList.insertAdjacentHTML('beforeend', publicaciones.map(renderPublicacion).join(''));
-                desde += publicaciones.length;
-                loadMoreButton.style.display = data.hayMas ? 'inline-block' : 'none';
+                if (publicaciones.length > 0) {
+                    postList.insertAdjacentHTML('beforeend', publicaciones.map(renderPublicacion).join(''));
+                    desde += publicaciones.length;
+                }
+
+                loadMoreButton.style.display = (data.hayMas && publicaciones.length > 0) ? 'inline-block' : 'none';
             } catch (error) {
-                postList.innerHTML = '<p class="empty-state">Ocurrió un error al cargar las publicaciones.</p>';
+                console.error('Error al cargar publicaciones:', error);
+                postList.innerHTML = '<p class="empty-state">Ocurrió un error al cargar las publicaciones. Por favor, recarga la página.</p>';
+                loadMoreButton.style.display = 'none';
             }
         }
 
@@ -189,25 +195,30 @@
                 event.preventDefault();
 
                 const formData = new FormData(createForm);
-                const response = await fetch('@Url.Action("GuardarPublicacion", "Home")', {
-                    method: 'POST',
-                    body: formData
-                });
+                try {
+                    const response = await fetch('@Url.Action("GuardarPublicacion", "Home")', {
+                        method: 'POST',
+                        body: formData
+                    });
 
-                if (!response.ok) {
-                    const errorText = await response.text();
-                    alert('No se pudo crear la publicación.');
-                    console.error('Error al crear publicación:', errorText);
-                    return;
+                    if (!response.ok) {
+                        const errorText = await response.text();
+                        alert('No se pudo crear la publicación.');
+                        console.error('Error al crear publicación:', errorText);
+                        return;
+                    }
+
+                    createForm.reset();
+                    refrescarPublicaciones();
+                } catch (error) {
+                    console.error('Error en formulario:', error);
+                    alert('Ocurrió un error al crear la publicación.');
                 }
-
-                createForm.reset();
-                
-                refrescarPublicaciones();
             });
         }
 
         document.addEventListener('DOMContentLoaded', () => {
+            console.log('Página cargada, inicializando publicaciones...');
             loadPublicaciones();
         });
 
@@ -230,7 +241,7 @@
 
                 const resultado = await response.json();
 
-                if (!response.ok) {
+                if (!resultado.ok) {
                     alert(resultado.message || 'No se pudo actualizar el Me Gusta.');
                     return;
                 }
@@ -243,6 +254,7 @@
                 button.classList.toggle('liked', liked);
                 countElement.textContent = `${resultado.cantidadLikes} me gusta`;
             } catch (error) {
+                console.error('Error al actualizar Like:', error);
                 alert('Ocurrió un error al actualizar el Me Gusta.');
             }
         });
@@ -273,7 +285,7 @@
 
                 const resultado = await response.json();
 
-                if (!response.ok) {
+                if (!resultado.ok) {
                     alert(resultado.message || 'No se pudo guardar el comentario.');
                     return;
                 }
@@ -293,6 +305,7 @@
 
                 form.reset();
             } catch (error) {
+                console.error('Error al guardar comentario:', error);
                 alert('Ocurrió un error al guardar el comentario.');
             }
         });

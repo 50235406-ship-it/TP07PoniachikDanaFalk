@@ -64,7 +64,6 @@ public class BD
         }
         catch
         {
-            // Si no hay SQL Server disponible, se intenta con la base de datos configurada por el entorno.
         }
 
         try
@@ -122,7 +121,7 @@ public class BD
         }
         catch
         {
-            // Si no se puede crear la base de datos, el error real se verá al intentar usar la aplicación.
+
         }
     }
 
@@ -185,24 +184,14 @@ public class BD
                    p.Descripcion,
                    p.Imagen,
                    p.FechaPublicacion,
-                   u.NombreUsuario,
-                   COUNT(DISTINCT mg.Id) AS CantidadLikes,
-                   CASE WHEN EXISTS (
-                        SELECT 1
-                        FROM dbo.PublicacionesMeGusta mg2
-                        WHERE mg2.IdPublicacion = p.Id
-                          AND mg2.IdUsuario = @UsuarioActualId
-                   ) THEN 1 ELSE 0 END AS MeGustaUsuario
+                   u.NombreUsuario
             FROM dbo.Publicaciones p
             INNER JOIN dbo.Usuarios u ON u.Id = p.IdUsuario
-            LEFT JOIN dbo.PublicacionesMeGusta mg ON mg.IdPublicacion = p.Id
-            GROUP BY p.Id, p.IdUsuario, p.Titulo, p.Descripcion, p.Imagen, p.FechaPublicacion, u.NombreUsuario
             ORDER BY p.FechaPublicacion DESC
             OFFSET @Desde ROWS FETCH NEXT @Cantidad ROWS ONLY;";
 
         var publicaciones = connection.Query<Publicacion>(query, new
         {
-            UsuarioActualId = usuarioActualId,
             Desde = desde,
             Cantidad = cantidad
         }).ToList();

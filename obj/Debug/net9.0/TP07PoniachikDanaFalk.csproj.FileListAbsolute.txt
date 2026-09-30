@@ -215,7 +215,6 @@ C:\Users\50705111\TP07PoniachikDanaFalk\obj\Debug\net9.0\scopedcss\bundle\TP07Po
 C:\Users\50705111\TP07PoniachikDanaFalk\obj\Debug\net9.0\scopedcss\projectbundle\TP07PoniachikDanaFalk.bundle.scp.css
 C:\Users\50705111\TP07PoniachikDanaFalk\obj\Debug\net9.0\compressed\2fbi73te4f-bh8rpnnv5w.gz
 C:\Users\50705111\TP07PoniachikDanaFalk\obj\Debug\net9.0\compressed\0eqi0ai02n-61n19gt1b8.gz
-C:\Users\50705111\TP07PoniachikDanaFalk\obj\Debug\net9.0\compressed\wg4oalmj2e-gg0izlw7rv.gz
 C:\Users\50705111\TP07PoniachikDanaFalk\obj\Debug\net9.0\compressed\jcjmox3o7p-t1cqhe9u97.gz
 C:\Users\50705111\TP07PoniachikDanaFalk\obj\Debug\net9.0\compressed\jdp4ruw3fw-c2jlpeoesf.gz
 C:\Users\50705111\TP07PoniachikDanaFalk\obj\Debug\net9.0\compressed\yrep5y383l-sejl45xvog.gz
@@ -284,3 +283,4 @@ C:\Users\50705111\TP07PoniachikDanaFalk\obj\Debug\net9.0\staticwebassets.build.e
 C:\Users\50705111\TP07PoniachikDanaFalk\obj\Debug\net9.0\TP07Poni.0E47DAB3.Up2Date
 C:\Users\50705111\TP07PoniachikDanaFalk\obj\Debug\net9.0\TP07PoniachikDanaFalk.genruntimeconfig.cache
 C:\Users\50705111\TP07PoniachikDanaFalk\obj\Debug\net9.0\ref\TP07PoniachikDanaFalk.dll
+C:\Users\50705111\TP07PoniachikDanaFalk\obj\Debug\net9.0\compressed\wg4oalmj2e-vchpeio7zi.gz

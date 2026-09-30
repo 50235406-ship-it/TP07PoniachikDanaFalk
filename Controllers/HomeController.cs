@@ -64,33 +64,90 @@ public class HomeController : Controller
     }
 
     [HttpPost]
-    public IActionResult GuardarPublicacion(string titulo, string descripcion, string? imagen)
+    public async Task<IActionResult> GuardarPublicacion(string titulo, string descripcion, IFormFile? imagen)
     {
-        if (HttpContext.Session.GetString("NombreUsuario") == null)
+        try
         {
-            return RedirectToAction("IniciarSesion");
-        }
+            if (HttpContext.Session.GetString("NombreUsuario") == null)
+            {
+                return RedirectToAction("IniciarSesion");
+            }
 
-        if (string.IsNullOrWhiteSpace(titulo) || string.IsNullOrWhiteSpace(descripcion))
-        {
-            TempData["Mensaje"] = "Completa el título y la descripción.";
+            if (string.IsNullOrWhiteSpace(titulo) || string.IsNullOrWhiteSpace(descripcion))
+            {
+                TempData["Mensaje"] = "Completa el título y la descripción.";
+                return RedirectToAction("Publicaciones");
+            }
+
+            string? imagenPath = null;
+
+            if (imagen != null && imagen.Length > 0)
+            {
+                const long maxFileSize = 5 * 1024 * 1024;
+                if (imagen.Length > maxFileSize)
+                {
+                    TempData["Mensaje"] = "La imagen no puede superar 5MB.";
+                    return RedirectToAction("Publicaciones");
+                }
+
+                var allowedExtensions = new[] { ".jpg", ".jpeg", ".png", ".gif" };
+                var fileExtension = Path.GetExtension(imagen.FileName).ToLowerInvariant();
+
+                if (!allowedExtensions.Contains(fileExtension))
+                {
+                    TempData["Mensaje"] = "Solo se permiten archivos JPG, PNG o GIF.";
+                    return RedirectToAction("Publicaciones");
+                }
+
+                try
+                {
+                    var uploadsPath = Path.Combine(Directory.GetCurrentDirectory(), "wwwroot", "uploads", "imagenes");
+
+                    if (!Directory.Exists(uploadsPath))
+                    {
+                        Directory.CreateDirectory(uploadsPath);
+                    }
+
+                    var fileName = $"{Guid.NewGuid()}{fileExtension}";
+                    var filePath = Path.Combine(uploadsPath, fileName);
+
+                    using (var stream = new FileStream(filePath, FileMode.Create))
+                    {
+                        await imagen.CopyToAsync(stream);
+                    }
+
+                    imagenPath = $"/uploads/imagenes/{fileName}";
+                    _logger.LogInformation($"Imagen guardada exitosamente en: {imagenPath}");
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogError(ex, $"Error al guardar la imagen: {ex.Message}");
+                    TempData["Mensaje"] = $"Error al guardar la imagen: {ex.Message}";
+                    return RedirectToAction("Publicaciones");
+                }
+            }
+
+            var publicacion = new Publicacion
+            {
+                IdUsuario = HttpContext.Session.GetInt32("ID") ?? 0,
+                Titulo = titulo.Trim(),
+                Descripcion = descripcion.Trim(),
+                Imagen = imagenPath,
+                FechaPublicacion = DateTime.Now
+            };
+
+            var bd = new BD();
+            bd.GuardarPublicacion(publicacion);
+
+            TempData["Mensaje"] = "Publicación creada correctamente.";
             return RedirectToAction("Publicaciones");
         }
-
-        var publicacion = new Publicacion
+        catch (Exception ex)
         {
-            IdUsuario = HttpContext.Session.GetInt32("ID") ?? 0,
-            Titulo = titulo.Trim(),
-            Descripcion = descripcion.Trim(),
-            Imagen = string.IsNullOrWhiteSpace(imagen) ? null : imagen.Trim(),
-            FechaPublicacion = DateTime.Now
-        };
-
-        var bd = new BD();
-        bd.GuardarPublicacion(publicacion);
-
-        TempData["Mensaje"] = "Publicación creada correctamente.";
-        return RedirectToAction("Publicaciones");
+            _logger.LogError(ex, "Error general en GuardarPublicacion");
+            TempData["Mensaje"] = $"Error: {ex.Message}";
+            return RedirectToAction("Publicaciones");
+        }
     }
 
     [HttpGet]
@@ -98,19 +155,26 @@ public class HomeController : Controller
     {
         if (HttpContext.Session.GetString("NombreUsuario") == null)
         {
-            return Unauthorized();
+            return Json(new { error = "Sesión no válida. Por favor, inicia sesión nuevamente.", publicaciones = new List<Publicacion>(), hayMas = false });
         }
 
-        var bd = new BD();
-        var usuarioActualId = HttpContext.Session.GetInt32("ID") ?? 0;
-        var publicaciones = bd.ObtenerPublicaciones(desde, cantidad, usuarioActualId);
-        var total = bd.ContarPublicaciones();
-
-        return Json(new
+        try
         {
-            publicaciones,
-            hayMas = (desde + publicaciones.Count) < total
-        });
+            var bd = new BD();
+            var usuarioActualId = HttpContext.Session.GetInt32("ID") ?? 0;
+            var publicaciones = bd.ObtenerPublicaciones(desde, cantidad, usuarioActualId);
+            var total = bd.ContarPublicaciones();
+
+            return Json(new
+            {
+                publicaciones,
+                hayMas = (desde + publicaciones.Count) < total
+            });
+        }
+        catch (Exception ex)
+        {
+            return Json(new { error = $"Error al cargar publicaciones: {ex.Message}", publicaciones = new List<Publicacion>(), hayMas = false });
+        }
     }
 
     [HttpPost]
@@ -118,43 +182,50 @@ public class HomeController : Controller
     {
         if (HttpContext.Session.GetString("NombreUsuario") == null)
         {
-            return Unauthorized();
+            return Json(new { ok = false, message = "Sesión no válida. Por favor, inicia sesión nuevamente." });
         }
 
-        var bd = new BD();
-        var usuarioId = HttpContext.Session.GetInt32("ID") ?? 0;
-
-        if (request == null || request.IdPublicacion <= 0)
+        try
         {
-            return BadRequest(new { message = "Identificador de publicación inválido." });
+            var bd = new BD();
+            var usuarioId = HttpContext.Session.GetInt32("ID") ?? 0;
+
+            if (request == null || request.IdPublicacion <= 0)
+            {
+                return Json(new { ok = false, message = "Identificador de publicación inválido." });
+            }
+
+            if (!bd.PublicacionExiste(request.IdPublicacion))
+            {
+                return Json(new { ok = false, message = "La publicación no existe." });
+            }
+
+            var yaLeDioLike = bd.TieneLike(request.IdPublicacion, usuarioId);
+
+            if (yaLeDioLike)
+            {
+                bd.QuitarLike(request.IdPublicacion, usuarioId);
+            }
+            else
+            {
+                bd.GuardarLike(request.IdPublicacion, usuarioId);
+            }
+
+            var cantidadLikes = bd.ObtenerCantidadLikes(request.IdPublicacion);
+            var liked = !yaLeDioLike;
+
+            return Json(new
+            {
+                ok = true,
+                liked,
+                cantidadLikes,
+                message = liked ? "Se agregó el Me Gusta." : "Se quitó el Me Gusta."
+            });
         }
-
-        if (!bd.PublicacionExiste(request.IdPublicacion))
+        catch (Exception ex)
         {
-            return NotFound(new { message = "La publicación no existe." });
+            return Json(new { ok = false, message = $"Error al procesar Like: {ex.Message}" });
         }
-
-        var yaLeDioLike = bd.TieneLike(request.IdPublicacion, usuarioId);
-
-        if (yaLeDioLike)
-        {
-            bd.QuitarLike(request.IdPublicacion, usuarioId);
-        }
-        else
-        {
-            bd.GuardarLike(request.IdPublicacion, usuarioId);
-        }
-
-        var cantidadLikes = bd.ObtenerCantidadLikes(request.IdPublicacion);
-        var liked = !yaLeDioLike;
-
-        return Json(new
-        {
-            ok = true,
-            liked,
-            cantidadLikes,
-            message = liked ? "Se agregó el Me Gusta." : "Se quitó el Me Gusta."
-        });
     }
 
     [HttpPost]
@@ -162,41 +233,48 @@ public class HomeController : Controller
     {
         if (HttpContext.Session.GetString("NombreUsuario") == null)
         {
-            return Unauthorized();
+            return Json(new { ok = false, message = "Sesión no válida. Por favor, inicia sesión nuevamente." });
         }
 
-        var bd = new BD();
-        var usuarioId = HttpContext.Session.GetInt32("ID") ?? 0;
-
-        if (request == null || request.IdPublicacion <= 0)
+        try
         {
-            return BadRequest(new { message = "Identificador de publicación inválido." });
-        }
+            var bd = new BD();
+            var usuarioId = HttpContext.Session.GetInt32("ID") ?? 0;
 
-        if (!bd.PublicacionExiste(request.IdPublicacion))
-        {
-            return NotFound(new { message = "La publicación no existe." });
-        }
-
-        if (string.IsNullOrWhiteSpace(request.Texto))
-        {
-            return BadRequest(new { message = "El comentario no puede estar vacío." });
-        }
-
-        var comentario = bd.GuardarComentario(request.IdPublicacion, usuarioId, request.Texto.Trim());
-
-        return Json(new
-        {
-            ok = true,
-            comentario = new
+            if (request == null || request.IdPublicacion <= 0)
             {
-                id = comentario.Id,
-                idPublicacion = comentario.IdPublicacion,
-                texto = comentario.Texto,
-                fechaComentario = comentario.FechaComentario,
-                nombreUsuario = comentario.NombreUsuario
+                return Json(new { ok = false, message = "Identificador de publicación inválido." });
             }
-        });
+
+            if (!bd.PublicacionExiste(request.IdPublicacion))
+            {
+                return Json(new { ok = false, message = "La publicación no existe." });
+            }
+
+            if (string.IsNullOrWhiteSpace(request.Texto))
+            {
+                return Json(new { ok = false, message = "El comentario no puede estar vacío." });
+            }
+
+            var comentario = bd.GuardarComentario(request.IdPublicacion, usuarioId, request.Texto.Trim());
+
+            return Json(new
+            {
+                ok = true,
+                comentario = new
+                {
+                    id = comentario.Id,
+                    idPublicacion = comentario.IdPublicacion,
+                    texto = comentario.Texto,
+                    fechaComentario = comentario.FechaComentario,
+                    nombreUsuario = comentario.NombreUsuario
+                }
+            });
+        }
+        catch (Exception ex)
+        {
+            return Json(new { ok = false, message = $"Error al guardar comentario: {ex.Message}" });
+        }
     }
 
     public IActionResult Registrado(string nombreUsuario, string contraseña, string nombre, string apellido)

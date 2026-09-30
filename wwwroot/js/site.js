@@ -1,8 +1,4 @@
-﻿// Please see documentation at https://learn.microsoft.com/aspnet/core/client-side/bundling-and-minification
-// for details on configuring this project to bundle and minify static web assets.
-
-// Validación de Nombre de Usuario
-function validoNombredeUsuario() {
+﻿function validoNombredeUsuario() {
     const nombreUsuario = document.getElementById('nombreUsuario');
     const mensaje = document.getElementById('mensajeNombreUsuario');
     
@@ -24,7 +20,6 @@ function validoNombredeUsuario() {
     }
 }
 
-// Validación de Contraseña
 function validoContraseña() {
     const contraseña = document.getElementById('contraseña');
     const mensaje = document.getElementById('mensajeContraseña');
@@ -46,13 +41,11 @@ function validoContraseña() {
         contraseña.parentElement.classList.remove('error');
     }
     
-    // Validar que las contraseñas coincidan si existe el segundo campo
     if (document.getElementById('contraseña2')) {
         contraseñasIguales();
     }
 }
 
-// Validación de Confirmación de Contraseña
 function contraseñasIguales() {
     const contraseña1 = document.getElementById('contraseña');
     const contraseña2 = document.getElementById('contraseña2');
@@ -76,7 +69,6 @@ function contraseñasIguales() {
     }
 }
 
-// Validación de Nombre
 function validoNombre() {
     const nombre = document.getElementById('nombre');
     const mensaje = document.getElementById('mensajeNombre');
@@ -99,7 +91,6 @@ function validoNombre() {
     }
 }
 
-// Validación de Apellido
 function validoApellido() {
     const apellido = document.getElementById('apellido');
     const mensaje = document.getElementById('mensajeApellido');

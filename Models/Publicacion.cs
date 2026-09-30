@@ -6,7 +6,7 @@ public class Publicacion
     public int IdUsuario { get; set; }
     public string Titulo { get; set; } = string.Empty;
     public string Descripcion { get; set; } = string.Empty;
-    public string? Imagen { get; set; }
+    public string Imagen { get; set; } = string.Empty;
     public DateTime FechaPublicacion { get; set; }
     public string NombreUsuario { get; set; } = string.Empty;
     public int CantidadLikes { get; set; }
