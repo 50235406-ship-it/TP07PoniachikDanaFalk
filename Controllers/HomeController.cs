@@ -1,362 +1,260 @@
 using System.Diagnostics;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.Http;
 using TP07PoniachikDanaFalk.Models;
 
 namespace TP07PoniachikDanaFalk.Controllers;
 
 public class HomeController : Controller
 {
-    private readonly ILogger<HomeController> _logger;
+	private readonly ILogger<HomeController> _logger;
 
-    public HomeController(ILogger<HomeController> logger)
-    {
-        _logger = logger;
-    }
+	public HomeController(ILogger<HomeController> logger)
+	{
+		_logger = logger;
+	}
 
-    public IActionResult Index()
-    {
-        if (HttpContext.Session.GetString("NombreUsuario") != null)
-        {
-            return RedirectToAction("Publicaciones");
-        }
+	private bool HaySesionActiva()
+	{
+		return !string.IsNullOrWhiteSpace(HttpContext.Session.GetString("NombreUsuario"));
+	}
 
-        return View();
-    }
+	private void GuardarMensajeSesion(string mensaje)
+	{
+		HttpContext.Session.SetString("Mensaje", mensaje ?? string.Empty);
+	}
 
-    public IActionResult Registrarse()
-    {
-        if (HttpContext.Session.GetString("NombreUsuario") != null)
-        {
-            return RedirectToAction("Publicaciones");
-        }
+	private string LeerYBorrarMensajeSesion()
+	{
+		var m = HttpContext.Session.GetString("Mensaje") ?? string.Empty;
+		HttpContext.Session.Remove("Mensaje");
+		return m;
+	}
 
-        return View();
-    }
+	private List<Publicacion> CargarPublicaciones(int desde, int cantidad)
+	{
+		var bd = new BD();
+		var usuarioActualId = HttpContext.Session.GetInt32("ID") ?? 0;
+		return bd.ObtenerPublicaciones(desde, cantidad, usuarioActualId);
+	}
 
-    public IActionResult IniciarSesion()
-    {
-        if (HttpContext.Session.GetString("NombreUsuario") != null)
-        {
-            return RedirectToAction("Publicaciones");
-        }
+	public IActionResult Index()
+	{
+		if (HaySesionActiva()) return RedirectToAction("Publicaciones");
+		return View();
+	}
 
-        return View();
-    }
+	public IActionResult Registrarse()
+	{
+		if (HaySesionActiva()) return RedirectToAction("Publicaciones");
+		return View();
+	}
 
-    public IActionResult Bienvenida()
-    {
-        if (HttpContext.Session.GetString("NombreUsuario") == null)
-        {
-            return RedirectToAction("IniciarSesion");
-        }
+	public IActionResult IniciarSesion()
+	{
+		if (HaySesionActiva()) return RedirectToAction("Publicaciones");
+		return View();
+	}
 
-        return RedirectToAction("Publicaciones");
-    }
+	public IActionResult Bienvenida()
+	{
+		if (!HaySesionActiva()) return RedirectToAction("IniciarSesion");
+		return RedirectToAction("Publicaciones");
+	}
 
-    public IActionResult Publicaciones()
-    {
-        if (HttpContext.Session.GetString("NombreUsuario") == null)
-        {
-            return RedirectToAction("IniciarSesion");
-        }
+	public IActionResult Publicaciones(int desde = 0, int cantidad = 10)
+	{
+		if (!HaySesionActiva()) return RedirectToAction("IniciarSesion");
 
-        return View();
-    }
+		var publicaciones = CargarPublicaciones(desde, cantidad);
+		var bd = new BD();
 
-    [HttpPost]
-    public async Task<IActionResult> GuardarPublicacion(string titulo, string descripcion, IFormFile? imagen)
-    {
-        try
-        {
-            if (HttpContext.Session.GetString("NombreUsuario") == null)
-            {
-                return RedirectToAction("IniciarSesion");
-            }
+		ViewBag.Publicaciones = publicaciones;
+		ViewData["Publicaciones"] = publicaciones;
+		ViewBag.TotalPublicaciones = bd.ContarPublicaciones();
+		ViewBag.Mensaje = LeerYBorrarMensajeSesion();
+		ViewBag.UsuarioActual = HttpContext.Session.GetString("NombreUsuario") ?? string.Empty;
 
-            if (string.IsNullOrWhiteSpace(titulo) || string.IsNullOrWhiteSpace(descripcion))
-            {
-                TempData["Mensaje"] = "Completa el título y la descripción.";
-                return RedirectToAction("Publicaciones");
-            }
+		return View("Publicaciones", publicaciones);
+	}
 
-            string? imagenPath = null;
+	[HttpPost]
+	public IActionResult GuardarPublicacion(string titulo, string descripcion, string img)
+	{
+		if (!HaySesionActiva()) return RedirectToAction("IniciarSesion");
 
-            if (imagen != null && imagen.Length > 0)
-            {
-                const long maxFileSize = 5 * 1024 * 1024;
-                if (imagen.Length > maxFileSize)
-                {
-                    TempData["Mensaje"] = "La imagen no puede superar 5MB.";
-                    return RedirectToAction("Publicaciones");
-                }
+		if (string.IsNullOrWhiteSpace(titulo) || string.IsNullOrWhiteSpace(descripcion))
+		{
+			GuardarMensajeSesion("Completá el título y la descripción.");
+			return RedirectToAction("Publicaciones");
+		}
 
-                var allowedExtensions = new[] { ".jpg", ".jpeg", ".png", ".gif" };
-                var fileExtension = Path.GetExtension(imagen.FileName).ToLowerInvariant();
+		var publicacion = new Publicacion(
+			HttpContext.Session.GetInt32("ID") ?? 0,
+			titulo.Trim(),
+			descripcion.Trim(),
+			img?.Trim() ?? string.Empty,
+			DateTime.Now,
+			HttpContext.Session.GetString("NombreUsuario") ?? string.Empty
+		);
 
-                if (!allowedExtensions.Contains(fileExtension))
-                {
-                    TempData["Mensaje"] = "Solo se permiten archivos JPG, PNG o GIF.";
-                    return RedirectToAction("Publicaciones");
-                }
+		var bd = new BD();
+		bd.GuardarPublicacion(publicacion);
 
-                try
-                {
-                    var uploadsPath = Path.Combine(Directory.GetCurrentDirectory(), "wwwroot", "uploads", "imagenes");
+		GuardarMensajeSesion("Publicación creada con éxito.");
+		return RedirectToAction("Publicaciones");
+	}
 
-                    if (!Directory.Exists(uploadsPath))
-                    {
-                        Directory.CreateDirectory(uploadsPath);
-                    }
+	[HttpPost]
+	public IActionResult ToggleLike(int idPublicacion)
+	{
+		if (!HaySesionActiva()) return RedirectToAction("IniciarSesion");
 
-                    var fileName = $"{Guid.NewGuid()}{fileExtension}";
-                    var filePath = Path.Combine(uploadsPath, fileName);
+		if (idPublicacion <= 0)
+		{
+			GuardarMensajeSesion("Identificador de publicación inválido.");
+			return RedirectToAction("Publicaciones");
+		}
 
-                    using (var stream = new FileStream(filePath, FileMode.Create))
-                    {
-                        await imagen.CopyToAsync(stream);
-                    }
+		var bd = new BD();
+		var usuarioId = HttpContext.Session.GetInt32("ID") ?? 0;
 
-                    imagenPath = $"/uploads/imagenes/{fileName}";
-                    _logger.LogInformation($"Imagen guardada exitosamente en: {imagenPath}");
-                }
-                catch (Exception ex)
-                {
-                    _logger.LogError(ex, $"Error al guardar la imagen: {ex.Message}");
-                    TempData["Mensaje"] = $"Error al guardar la imagen: {ex.Message}";
-                    return RedirectToAction("Publicaciones");
-                }
-            }
+		if (!bd.PublicacionExiste(idPublicacion))
+		{
+			GuardarMensajeSesion("La publicación no existe.");
+			return RedirectToAction("Publicaciones");
+		}
 
-            var publicacion = new Publicacion
-            {
-                IdUsuario = HttpContext.Session.GetInt32("ID") ?? 0,
-                Titulo = titulo.Trim(),
-                Descripcion = descripcion.Trim(),
-                Imagen = imagenPath,
-                FechaPublicacion = DateTime.Now
-            };
+		if (bd.TieneLike(idPublicacion, usuarioId))
+		{
+			bd.QuitarLike(idPublicacion, usuarioId);
+			GuardarMensajeSesion("Quitaste tu Me Gusta.");
+		}
+		else
+		{
+			bd.GuardarLike(idPublicacion, usuarioId);
+			GuardarMensajeSesion("Agregaste un Me Gusta.");
+		}
 
-            var bd = new BD();
-            bd.GuardarPublicacion(publicacion);
+		return RedirectToAction("Publicaciones");
+	}
 
-            TempData["Mensaje"] = "Publicación creada correctamente.";
-            return RedirectToAction("Publicaciones");
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error general en GuardarPublicacion");
-            TempData["Mensaje"] = $"Error: {ex.Message}";
-            return RedirectToAction("Publicaciones");
-        }
-    }
+	[HttpPost]
+	public IActionResult AgregarComentario(int idPublicacion, string texto)
+	{
+		if (!HaySesionActiva()) return RedirectToAction("IniciarSesion");
 
-    [HttpGet]
-    public IActionResult ObtenerPublicaciones(int desde = 0, int cantidad = 10)
-    {
-        if (HttpContext.Session.GetString("NombreUsuario") == null)
-        {
-            return Json(new { error = "Sesión no válida. Por favor, inicia sesión nuevamente.", publicaciones = new List<Publicacion>(), hayMas = false });
-        }
+		if (idPublicacion <= 0)
+		{
+			GuardarMensajeSesion("Identificador de publicación inválido.");
+			return RedirectToAction("Publicaciones");
+		}
 
-        try
-        {
-            var bd = new BD();
-            var usuarioActualId = HttpContext.Session.GetInt32("ID") ?? 0;
-            var publicaciones = bd.ObtenerPublicaciones(desde, cantidad, usuarioActualId);
-            var total = bd.ContarPublicaciones();
+		if (string.IsNullOrWhiteSpace(texto))
+		{
+			GuardarMensajeSesion("El comentario no puede estar vacío.");
+			return RedirectToAction("Publicaciones");
+		}
 
-            return Json(new
-            {
-                publicaciones,
-                hayMas = (desde + publicaciones.Count) < total
-            });
-        }
-        catch (Exception ex)
-        {
-            return Json(new { error = $"Error al cargar publicaciones: {ex.Message}", publicaciones = new List<Publicacion>(), hayMas = false });
-        }
-    }
+		var bd = new BD();
+		var usuarioId = HttpContext.Session.GetInt32("ID") ?? 0;
 
-    [HttpPost]
-    public IActionResult ToggleLike([FromBody] LikeRequest request)
-    {
-        if (HttpContext.Session.GetString("NombreUsuario") == null)
-        {
-            return Json(new { ok = false, message = "Sesión no válida. Por favor, inicia sesión nuevamente." });
-        }
+		if (!bd.PublicacionExiste(idPublicacion))
+		{
+			GuardarMensajeSesion("La publicación no existe.");
+			return RedirectToAction("Publicaciones");
+		}
 
-        try
-        {
-            var bd = new BD();
-            var usuarioId = HttpContext.Session.GetInt32("ID") ?? 0;
+		bd.GuardarComentario(idPublicacion, usuarioId, texto.Trim());
+		GuardarMensajeSesion("Comentario agregado correctamente.");
 
-            if (request == null || request.IdPublicacion <= 0)
-            {
-                return Json(new { ok = false, message = "Identificador de publicación inválido." });
-            }
+		return RedirectToAction("Publicaciones");
+	}
 
-            if (!bd.PublicacionExiste(request.IdPublicacion))
-            {
-                return Json(new { ok = false, message = "La publicación no existe." });
-            }
+	public IActionResult Registrado(string nombreUsuario, string contraseña, string nombre, string apellido)
+	{
+		var bd = new BD();
 
-            var yaLeDioLike = bd.TieneLike(request.IdPublicacion, usuarioId);
+		if (string.IsNullOrWhiteSpace(nombreUsuario) || string.IsNullOrWhiteSpace(contraseña) || string.IsNullOrWhiteSpace(nombre) || string.IsNullOrWhiteSpace(apellido))
+		{
+			ViewBag.mensaje = "Completá todos los campos.";
+			return View("Registrarse");
+		}
 
-            if (yaLeDioLike)
-            {
-                bd.QuitarLike(request.IdPublicacion, usuarioId);
-            }
-            else
-            {
-                bd.GuardarLike(request.IdPublicacion, usuarioId);
-            }
+		nombreUsuario = nombreUsuario.Trim();
+		nombre = nombre.Trim();
+		apellido = apellido.Trim();
 
-            var cantidadLikes = bd.ObtenerCantidadLikes(request.IdPublicacion);
-            var liked = !yaLeDioLike;
+		if (bd.UsuarioExiste(nombreUsuario))
+		{
+			ViewBag.mensaje = "Ese nombre de usuario ya está en uso.";
+			return View("Registrarse");
+		}
 
-            return Json(new
-            {
-                ok = true,
-                liked,
-                cantidadLikes,
-                message = liked ? "Se agregó el Me Gusta." : "Se quitó el Me Gusta."
-            });
-        }
-        catch (Exception ex)
-        {
-            return Json(new { ok = false, message = $"Error al procesar Like: {ex.Message}" });
-        }
-    }
+		var nuevoUsuario = new Usuario(nombreUsuario, contraseña, nombre, apellido);
+		bd.GuardarUsuario(nuevoUsuario);
 
-    [HttpPost]
-    public IActionResult AgregarComentario([FromBody] ComentarioRequest request)
-    {
-        if (HttpContext.Session.GetString("NombreUsuario") == null)
-        {
-            return Json(new { ok = false, message = "Sesión no válida. Por favor, inicia sesión nuevamente." });
-        }
+		var usuarioRegistrado = bd.ObtenerUsuarios().FirstOrDefault(u => u.NombreUsuario == nombreUsuario);
 
-        try
-        {
-            var bd = new BD();
-            var usuarioId = HttpContext.Session.GetInt32("ID") ?? 0;
+		if (usuarioRegistrado == null)
+		{
+			ViewBag.mensaje = "No pudimos registrar el usuario.";
+			return View("Registrarse");
+		}
 
-            if (request == null || request.IdPublicacion <= 0)
-            {
-                return Json(new { ok = false, message = "Identificador de publicación inválido." });
-            }
+		HttpContext.Session.SetString("NombreUsuario", usuarioRegistrado.NombreUsuario);
+		HttpContext.Session.SetString("Nombre", usuarioRegistrado.Nombre);
+		HttpContext.Session.SetString("Apellido", usuarioRegistrado.Apellido);
+		HttpContext.Session.SetInt32("ID", usuarioRegistrado.Id);
+		HttpContext.Session.SetString("TipoUsuario", "Usuario");
 
-            if (!bd.PublicacionExiste(request.IdPublicacion))
-            {
-                return Json(new { ok = false, message = "La publicación no existe." });
-            }
+		return RedirectToAction("Publicaciones");
+	}
 
-            if (string.IsNullOrWhiteSpace(request.Texto))
-            {
-                return Json(new { ok = false, message = "El comentario no puede estar vacío." });
-            }
+	public IActionResult Logueado(string nombreUsuario, string contraseña)
+	{
+		var bd = new BD();
+		var usuarios = bd.ObtenerUsuarios();
+		ViewBag.mensaje = string.Empty;
 
-            var comentario = bd.GuardarComentario(request.IdPublicacion, usuarioId, request.Texto.Trim());
+		nombreUsuario = nombreUsuario?.Trim() ?? string.Empty;
 
-            return Json(new
-            {
-                ok = true,
-                comentario = new
-                {
-                    id = comentario.Id,
-                    idPublicacion = comentario.IdPublicacion,
-                    texto = comentario.Texto,
-                    fechaComentario = comentario.FechaComentario,
-                    nombreUsuario = comentario.NombreUsuario
-                }
-            });
-        }
-        catch (Exception ex)
-        {
-            return Json(new { ok = false, message = $"Error al guardar comentario: {ex.Message}" });
-        }
-    }
+		if (Usuario.Logueo(nombreUsuario, contraseña, usuarios))
+		{
+			var usuarioLogueado = usuarios.FirstOrDefault(u => u.NombreUsuario == nombreUsuario);
 
-    public IActionResult Registrado(string nombreUsuario, string contraseña, string nombre, string apellido)
-    {
-        BD bd = new BD();
+			if (usuarioLogueado == null)
+			{
+				ViewBag.mensaje = "No encontramos tus datos. Probá de nuevo.";
+				return View("IniciarSesion");
+			}
 
-        if (string.IsNullOrWhiteSpace(nombreUsuario) || string.IsNullOrWhiteSpace(contraseña) || string.IsNullOrWhiteSpace(nombre) || string.IsNullOrWhiteSpace(apellido))
-        {
-            ViewBag.mensaje = "Complete todos los campos.";
-            return View("Registrarse");
-        }
+			HttpContext.Session.SetString("NombreUsuario", usuarioLogueado.NombreUsuario);
+			HttpContext.Session.SetString("Nombre", usuarioLogueado.Nombre);
+			HttpContext.Session.SetString("Apellido", usuarioLogueado.Apellido);
+			HttpContext.Session.SetInt32("ID", usuarioLogueado.Id);
+			HttpContext.Session.SetString("TipoUsuario", "Usuario");
 
-        if (bd.UsuarioExiste(nombreUsuario))
-        {
-            ViewBag.mensaje = "El usuario ya existe";
-            return View("Registrarse");
-        }
+			return RedirectToAction("Publicaciones");
+		}
 
-        Usuario nuevoUsuario = new Usuario(nombreUsuario, contraseña, nombre, apellido);
-        bd.GuardarUsuario(nuevoUsuario);
+		ViewBag.mensaje = "Usuario o contraseña incorrectos.";
+		return View("IniciarSesion");
+	}
 
-        Usuario usuarioRegistrado = bd.ObtenerUsuarios().FirstOrDefault(u => u.NombreUsuario == nombreUsuario);
+	public IActionResult Logout()
+	{
+		HttpContext.Session.Clear();
+		return RedirectToAction("Index");
+	}
 
-        if (usuarioRegistrado == null)
-        {
-            ViewBag.mensaje = "No se pudo registrar el usuario.";
-            return View("Registrarse");
-        }
+	public IActionResult Privacy() => View();
 
-        HttpContext.Session.SetString("NombreUsuario", usuarioRegistrado.NombreUsuario);
-        HttpContext.Session.SetString("Nombre", usuarioRegistrado.Nombre);
-        HttpContext.Session.SetString("Apellido", usuarioRegistrado.Apellido);
-        HttpContext.Session.SetInt32("ID", usuarioRegistrado.Id);
-        HttpContext.Session.SetString("TipoUsuario", "Usuario");
-
-        return RedirectToAction("Publicaciones");
-    }
-
-    public IActionResult Logueado(string nombreUsuario, string contraseña)
-    {
-        BD bd = new BD();
-        List<Usuario> usuarios = bd.ObtenerUsuarios();
-        ViewBag.mensaje = string.Empty;
-
-        if (Usuario.Logueo(nombreUsuario, contraseña, usuarios))
-        {
-            Usuario usuarioLogueado = usuarios.FirstOrDefault(u => u.NombreUsuario == nombreUsuario);
-            if (usuarioLogueado == null)
-            {
-                ViewBag.mensaje = "El usuario o la contraseña son incorrectos";
-                return View("IniciarSesion");
-            }
-
-            HttpContext.Session.SetString("NombreUsuario", usuarioLogueado.NombreUsuario);
-            HttpContext.Session.SetString("Nombre", usuarioLogueado.Nombre);
-            HttpContext.Session.SetString("Apellido", usuarioLogueado.Apellido);
-            HttpContext.Session.SetInt32("ID", usuarioLogueado.Id);
-            HttpContext.Session.SetString("TipoUsuario", "Usuario");
-
-            return RedirectToAction("Publicaciones");
-        }
-
-        ViewBag.mensaje = "El usuario o la contraseña son incorrectos";
-        return View("IniciarSesion");
-    }
-
-    public IActionResult Logout()
-    {
-        HttpContext.Session.Clear();
-        return RedirectToAction("Index");
-    }
-
-    public IActionResult Privacy()
-    {
-        return View();
-    }
-
-    [ResponseCache(Duration = 0, Location = ResponseCacheLocation.None, NoStore = true)]
-    public IActionResult Error()
-    {
-        return View(new ErrorViewModel { RequestId = Activity.Current?.Id ?? HttpContext.TraceIdentifier });
-    }
+	[ResponseCache(Duration = 0, Location = ResponseCacheLocation.None, NoStore = true)]
+	public IActionResult Error()
+	{
+		return View(new ErrorViewModel { RequestId = Activity.Current?.Id ?? HttpContext.TraceIdentifier });
+	}
 }
 
 public class LikeRequest

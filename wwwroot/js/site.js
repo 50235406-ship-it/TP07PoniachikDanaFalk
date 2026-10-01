@@ -5,7 +5,7 @@
     if (!nombreUsuario || !mensaje) return;
     
     const valor = nombreUsuario.value.trim();
-    const isValid = valor.length >= 3 && valor.length <= 20 && /^[a-zA-Z0-9_-]+$/.test(valor);
+    const isValid = valor.length >= 3 && valor.length <= 20 ;
     
     if (valor === '') {
         mensaje.classList.remove('visible');
@@ -76,7 +76,7 @@ function validoNombre() {
     if (!nombre || !mensaje) return;
     
     const valor = nombre.value.trim();
-    const isValid = valor.length >= 2 && /^[a-zA-ZáéíóúÁÉÍÓÚñÑ\s]+$/.test(valor);
+    const isValid = valor.length >= 2 ;
     
     if (valor === '') {
         mensaje.classList.remove('visible');
@@ -98,7 +98,7 @@ function validoApellido() {
     if (!apellido || !mensaje) return;
     
     const valor = apellido.value.trim();
-    const isValid = valor.length >= 2 && /^[a-zA-ZáéíóúÁÉÍÓÚñÑ\s]+$/.test(valor);
+    const isValid = valor.length >= 2 ;
     
     if (valor === '') {
         mensaje.classList.remove('visible');
