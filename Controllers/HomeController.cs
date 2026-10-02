@@ -78,8 +78,29 @@ public class HomeController : Controller
 		return View("Publicaciones", publicaciones);
 	}
 
+	[HttpGet]
+	public IActionResult ObtenerPublicaciones(int desde = 0, int cantidad = 10)
+	{
+		if (!HaySesionActiva())
+			return Json(new { error = "No hay sesión activa" });
+
+		try
+		{
+			var publicaciones = CargarPublicaciones(desde, cantidad);
+			var bd = new BD();
+			var totalPublicaciones = bd.ContarPublicaciones();
+			var hayMas = (desde + cantidad) < totalPublicaciones;
+
+			return Json(new { publicaciones, hayMas });
+		}
+		catch (Exception ex)
+		{
+			return Json(new { error = ex.Message });
+		}
+	}
+
 	[HttpPost]
-	public IActionResult GuardarPublicacion(string titulo, string descripcion, string img)
+	public IActionResult GuardarPublicacion(string titulo, string descripcion)
 	{
 		if (!HaySesionActiva()) return RedirectToAction("IniciarSesion");
 
@@ -93,7 +114,7 @@ public class HomeController : Controller
 			HttpContext.Session.GetInt32("ID") ?? 0,
 			titulo.Trim(),
 			descripcion.Trim(),
-			img?.Trim() ?? string.Empty,
+			string.Empty,
 			DateTime.Now,
 			HttpContext.Session.GetString("NombreUsuario") ?? string.Empty
 		);
@@ -106,69 +127,57 @@ public class HomeController : Controller
 	}
 
 	[HttpPost]
-	public IActionResult ToggleLike(int idPublicacion)
+	public IActionResult ToggleLike([FromBody] LikeRequest request)
 	{
-		if (!HaySesionActiva()) return RedirectToAction("IniciarSesion");
+		if (!HaySesionActiva())
+			return Json(new { ok = false, message = "No hay sesión activa" });
 
-		if (idPublicacion <= 0)
-		{
-			GuardarMensajeSesion("Identificador de publicación inválido.");
-			return RedirectToAction("Publicaciones");
-		}
+		if (request == null || request.IdPublicacion <= 0)
+			return Json(new { ok = false, message = "Identificador de publicación inválido." });
 
 		var bd = new BD();
 		var usuarioId = HttpContext.Session.GetInt32("ID") ?? 0;
 
-		if (!bd.PublicacionExiste(idPublicacion))
-		{
-			GuardarMensajeSesion("La publicación no existe.");
-			return RedirectToAction("Publicaciones");
-		}
+		if (!bd.PublicacionExiste(request.IdPublicacion))
+			return Json(new { ok = false, message = "La publicación no existe." });
 
-		if (bd.TieneLike(idPublicacion, usuarioId))
+		bool liked;
+		if (bd.TieneLike(request.IdPublicacion, usuarioId))
 		{
-			bd.QuitarLike(idPublicacion, usuarioId);
-			GuardarMensajeSesion("Quitaste tu Me Gusta.");
+			bd.QuitarLike(request.IdPublicacion, usuarioId);
+			liked = false;
 		}
 		else
 		{
-			bd.GuardarLike(idPublicacion, usuarioId);
-			GuardarMensajeSesion("Agregaste un Me Gusta.");
+			bd.GuardarLike(request.IdPublicacion, usuarioId);
+			liked = true;
 		}
 
-		return RedirectToAction("Publicaciones");
+		var cantidadLikes = bd.ObtenerCantidadLikes(request.IdPublicacion);
+		return Json(new { ok = true, liked, cantidadLikes });
 	}
 
 	[HttpPost]
-	public IActionResult AgregarComentario(int idPublicacion, string texto)
+	public IActionResult AgregarComentario([FromBody] ComentarioRequest request)
 	{
-		if (!HaySesionActiva()) return RedirectToAction("IniciarSesion");
+		if (!HaySesionActiva())
+			return Json(new { ok = false, message = "No hay sesión activa" });
 
-		if (idPublicacion <= 0)
-		{
-			GuardarMensajeSesion("Identificador de publicación inválido.");
-			return RedirectToAction("Publicaciones");
-		}
+		if (request == null || request.IdPublicacion <= 0)
+			return Json(new { ok = false, message = "Identificador de publicación inválido." });
 
-		if (string.IsNullOrWhiteSpace(texto))
-		{
-			GuardarMensajeSesion("El comentario no puede estar vacío.");
-			return RedirectToAction("Publicaciones");
-		}
+		if (string.IsNullOrWhiteSpace(request.Texto))
+			return Json(new { ok = false, message = "El comentario no puede estar vacío." });
 
 		var bd = new BD();
 		var usuarioId = HttpContext.Session.GetInt32("ID") ?? 0;
 
-		if (!bd.PublicacionExiste(idPublicacion))
-		{
-			GuardarMensajeSesion("La publicación no existe.");
-			return RedirectToAction("Publicaciones");
-		}
+		if (!bd.PublicacionExiste(request.IdPublicacion))
+			return Json(new { ok = false, message = "La publicación no existe." });
 
-		bd.GuardarComentario(idPublicacion, usuarioId, texto.Trim());
-		GuardarMensajeSesion("Comentario agregado correctamente.");
+		var comentario = bd.GuardarComentario(request.IdPublicacion, usuarioId, request.Texto.Trim());
 
-		return RedirectToAction("Publicaciones");
+		return Json(new { ok = true, comentario });
 	}
 
 	public IActionResult Registrado(string nombreUsuario, string contraseña, string nombre, string apellido)
